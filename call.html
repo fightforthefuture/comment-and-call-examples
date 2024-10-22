@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Call Form Example</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+</head>
+
+<body>
+    <main id="app" class="container">
+        <h1>Call Form Example</h1>
+        <p>Submit this form to test the CallPower API. View source or open the web inspector to see how it works!
+        </p>
+
+        <article v-if="hasCalled">
+            <h3>Calling you now!</h3>
+            <p><b>Introduce yourself, be polite, and say:</b></p>
+            <blockquote class="border rounded bg-light p-3">{{ callScript }}</blockquote>
+            <p><i>If lines are busy, we may call you in a few minutes.</i></p>
+            <button @click="hasCalled = false">Try again</button>
+        </article>
+
+        <form v-else @submit.prevent="submitForm">
+            <div class="grid">
+                <div>
+                    <label for="phone">Phone:</label>
+                    <input type="tel" id="phone" name="userPhone" v-model="phone" required autofocus>
+                </div>
+
+                <div>
+                    <label for="postal_code">ZIP Code:</label>
+                    <input type="tel" id="postal_code" name="userLocation" v-model="zipCode" required>
+                </div>
+            </div>
+
+            <button type="submit" :disabled="isLoading">
+                <span v-if="isLoading">Calling...</span>
+                <span v-else>Call</span>
+            </button>
+        </form>
+    </main>
+    <script>
+        const { createApp } = Vue
+
+        const API_URL = 'https://call-congress.fightforthefuture.org/create'
+
+        const app = createApp({
+            data() {
+                return {
+                    campaignId: 'KOSA_CPC Calls_20240730',
+                    callScript: 'Hello, my name is [YOUR NAME] and I am a constituent. I am calling to urge [RECIPIENT] to support [CAMPAIGN].',
+                    phone: '',
+                    zipCode: '',
+                    isLoading: false,
+                    hasCalled: false,
+                }
+            },
+
+            methods: {
+                async submitForm($event) {
+                    if (this.isLoading) return
+
+                    this.isLoading = true
+
+                    const params = new URLSearchParams()
+                    params.append('campaignId', this.campaignId)
+                    params.append('userPhone', this.phone)
+                    params.append('userLocation', this.zipCode)
+
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        body: params
+                    })
+
+                    if (response.ok) {
+                        const data = await response.json()
+                        console.log('Received response from API:', data)
+                    }
+
+                    this.isLoading = false
+                    this.hasCalled = true
+                },
+            }
+        })
+
+        app.mount('#app')
+    </script>
+</body>
+
+</html>
