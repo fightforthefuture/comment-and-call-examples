@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>State Lawmakers Example</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        button {
+            white-space: nowrap;
+        }
+        .recipient {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border: 1px solid var(--pico-muted-border-color);
+            border-radius: 999px;
+            padding: 0.25rem 0.5rem;
+            min-width: 10rem;
+        }
+        .recipient img,
+        .recipient .avatar {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 50%;
+            flex-shrink: 0;
+            object-fit: cover;
+            margin: var(--pico-spacing) * 0.5;
+        }
+        .recipient .avatar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: bold;
+            background: var(--pico-background-color);
+        }
+        .recipient .role {
+            margin: 0;
+            font-size: 0.8rem;
+            color: var(--pico-muted-color);
+        }
+        .compose-field {
+            display: grid;
+            grid-template-columns: 5rem 1fr;
+            gap: 0.5rem 1rem;
+            align-items: start;
+            padding-bottom: 1rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--pico-muted-border-color);
+        }
+        .compose-field:last-of-type {
+            border-bottom: none;
+        }
+        .share-links {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+        }
+        .share-links a {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+        }
+        .share-links a:first-of-type {
+            grid-column: 1 / -1;
+        }
+    </style>
+</head>
+<body>
+    <main id="app" class="container">
+        <h1>State Lawmakers API Example</h1>
+        <p>
+            Enter your address to find your state lawmakers and compose an email.
+            View source or open the web inspector to see how it works!
+        </p>
+        <hr>
+
+        <h2>Email your state lawmakers</h2>
+        <form @submit.prevent="findLawmakers">
+            <label for="address">Enter your address (including city and state) to find your local lawmakers:</label>
+            <fieldset role="group">
+                <input
+                    type="text"
+                    id="address"
+                    name="address"
+                    v-model="address"
+                    placeholder="123 Main St, Anytown, USA"
+                    autocomplete="street-address"
+                    required
+                >
+                <button type="submit" :disabled="isLoading">
+                    <span v-if="isLoading">Searching...</span>
+                    <span v-else>Find lawmakers</span>
+                </button>
+            </fieldset>
+            <small>We won't save your address. We just need it to look up your reps.</small>
+        </form>
+
+        <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
+        <p v-else-if="showEmptyMessage" class="error">
+            We couldn't find state lawmakers with public email addresses for that address.
+        </p>
+
+        <article v-if="lawmakers.length">
+            <header><strong>New Message</strong></header>
+
+            <div class="compose-field">
+                <strong>To:</strong>
+                <div class="grid">
+                    <div
+                        v-for="lawmaker in lawmakers"
+                        :key="lawmaker.openstates_id || lawmaker.bioguide_id || lawmaker.name"
+                        class="recipient"
+                    >
+                        <img v-if="lawmaker.image" :src="lawmaker.image" :alt="`${lawmaker.name} photo`" loading="lazy">
+                        <div v-else class="avatar" aria-hidden="true">{{ lawmakerInitials(lawmaker) }}</div>
+                        <div>
+                            <div><strong>{{ lawmaker.name }}</strong></div>
+                            <p class="role">{{ lawmakerRole(lawmaker) }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="compose-field">
+                <strong>Subject:</strong>
+                <div>{{ emailSubject }}</div>
+            </div>
+
+            <label for="body"><strong>Body:</strong></label>
+            <textarea id="body" rows="8" v-model="emailBody"></textarea>
+
+            <div class="share-links">
+                <a class="primary share-primary" role="button" :href="mailtoLink" target="_blank" rel="noopener noreferrer">
+                    <span aria-hidden="true">✉️</span> Send with default email app
+                </a>
+                <a class="outline share-secondary" role="button" :href="gmailLink" target="_blank" rel="noopener noreferrer">
+                    <span aria-hidden="true">🗑️</span> Send with Gmail
+                </a>
+                <a class="outline share-secondary" role="button" :href="protonMailLink" target="_blank" rel="noopener noreferrer">
+                    <span aria-hidden="true">🔒</span> Send with ProtonMail
+                </a>
+                <a class="outline share-secondary" role="button" :href="fastMailLink" target="_blank" rel="noopener noreferrer">
+                    <span aria-hidden="true">⚡</span> Send with FastMail
+                </a>
+            </div>
+        </article>
+    </main>
+    <script>
+        const { createApp } = Vue
+
+        const API_URL = 'https://comments-api.fftf.cat/lawmakers'
+
+        const app = createApp({
+            data() {
+                return {
+                    emailSubject: 'A message from your constituent',
+                    emailBody: "Hi - my name is [YOUR NAME] and I am a constituent. I'm writing to ask you to do something very important. Thank you.",
+                    address: '',
+                    lawmakers: [],
+                    errorMessage: '',
+                    showEmptyMessage: false,
+                    isLoading: false,
+                }
+            },
+
+            computed: {
+                recipientEmails() {
+                    return this.lawmakers.map(l => l.email).filter(Boolean).join(',')
+                },
+
+                mailtoLink() {
+                    const mailto = `mailto:${this.recipientEmails}?subject=${encodeURIComponent(this.emailSubject)}&body=${encodeURIComponent(this.emailBody)}`
+                    return mailto
+                },
+
+                gmailLink() {
+                    return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(this.recipientEmails)}&su=${encodeURIComponent(this.emailSubject)}&body=${encodeURIComponent(this.emailBody)}`
+                },
+
+                protonMailLink() {
+                    return `https://mail.proton.me/inbox/#mailto=${encodeURIComponent(this.mailtoLink)}`
+                },
+
+                fastMailLink() {
+                    return `https://app.fastmail.com/mail/compose?mailto=${encodeURIComponent(this.mailtoLink)}`
+                },
+            },
+
+            methods: {
+                resetMessages() {
+                    this.errorMessage = ''
+                    this.showEmptyMessage = false
+                    this.lawmakers = []
+                },
+
+                lawmakerInitials(lawmaker) {
+                    return (lawmaker.name || '')
+                        .split(' ')
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map(part => part[0])
+                        .join('')
+                },
+
+                prettyOffice(office) {
+                    return (office || 'State lawmaker')
+                        .replace(/_/g, ' ')
+                        .replace(/\b\w/g, letter => letter.toUpperCase())
+                },
+
+                lawmakerRole(lawmaker) {
+                    let role = this.prettyOffice(lawmaker.office)
+
+                    if (lawmaker.office === 'house') {
+                        role = 'State Representative'
+                    } else if (lawmaker.office === 'senate') {
+                        role = 'State Senator'
+                    }
+
+                    if (lawmaker.district) {
+                        role += `, District ${lawmaker.district}`
+                    }
+
+                    return role
+                },
+
+                async findLawmakers() {
+                    if (this.isLoading) return
+
+                    this.resetMessages()
+                    this.isLoading = true
+
+                    try {
+                        const params = new URLSearchParams({
+                            address: this.address,
+                            limit: 100,
+                        })
+                        const response = await fetch(`${API_URL}?${params}`)
+                        const payload = await response.json()
+
+                        if (!response.ok) {
+                            throw new Error(payload.error || 'Unable to look up lawmakers for that address.')
+                        }
+
+                        const lawmakers = (payload.data || []).filter(lawmaker => {
+                            return lawmaker.jurisdiction === 'state' && lawmaker.email
+                        })
+
+                        if (lawmakers.length === 0) {
+                            this.showEmptyMessage = true
+                            return
+                        }
+
+                        this.lawmakers = lawmakers
+                        console.log('Found lawmakers:', lawmakers)
+                    } catch (error) {
+                        this.errorMessage = error.message || 'Unable to look up lawmakers for that address.'
+                    } finally {
+                        this.isLoading = false
+                    }
+                },
+            },
+        })
+
+        app.mount('#app')
+    </script>
+</body>
+</html>
