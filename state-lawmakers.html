@@ -10,6 +10,17 @@
         button {
             white-space: nowrap;
         }
+        .recipients {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 0.5rem;
+        }
+        @media (min-width: 768px) {
+            .recipients { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (min-width: 1200px) {
+            .recipients { grid-template-columns: repeat(4, 1fr); }
+        }
         .recipient {
             display: inline-flex;
             align-items: center;
@@ -109,7 +120,7 @@
 
             <div class="compose-field">
                 <strong>To:</strong>
-                <div class="grid">
+                <div class="recipients">
                     <div
                         v-for="lawmaker in lawmakers"
                         :key="lawmaker.openstates_id || lawmaker.bioguide_id || lawmaker.name"
@@ -152,7 +163,7 @@
     <script>
         const { createApp } = Vue
 
-        const API_URL = 'https://comments-api.fftf.cat/lawmakers'
+        const API_URL = 'https://comments-api-fpf.fftf.app/lawmakers'
 
         const app = createApp({
             data() {
